@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://superclaude.example.com/schemas/template.json",
+  "title": "SuperClaude Template Schema",
+  "description": "テンプレート定義のスキーマ",
+  "type": "object",
+  "required": ["metadata", "parameters", "resources"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["name", "description", "version", "provider"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "テンプレート名"
+        },
+        "description": {
+          "type": "string",
+          "description": "テンプレートの説明"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "セマンティックバージョン"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["azure", "aws"],
+          "description": "クラウドプロバイダー"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["compute", "storage", "network", "database", "security", "monitoring"],
+          "description": "リソースカテゴリ"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "テンプレートタグ"
+        }
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type", "description"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "パラメータ名"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["string", "number", "boolean", "array", "object"],
+            "description": "パラメータの型"
+          },
+          "description": {
+            "type": "string",
+            "description": "パラメータの説明"
+          },
+          "required": {
+            "type": "boolean",
+            "default": false,
+            "description": "必須パラメータかどうか"
+          },
+          "default": {
+            "description": "デフォルト値"
+          },
+          "validation": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "正規表現パターン（文字列型用）"
+              },
+              "min": {
+                "type": "number",
+                "description": "最小値（数値型用）"
+              },
+              "max": {
+                "type": "number",
+                "description": "最大値（数値型用）"
+              },
+              "minLength": {
+                "type": "integer",
+                "description": "最小文字列長（文字列型用）"
+              },
+              "maxLength": {
+                "type": "integer",
+                "description": "最大文字列長（文字列型用）"
+              },
+              "enum": {
+                "type": "array",
+                "description": "許可される値のリスト"
+              }
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "リソース定義またはCLIコマンドテンプレート"
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "出力名"
+          },
+          "description": {
+            "type": "string",
+            "description": "出力の説明"
+          },
+          "value": {
+            "type": "string",
+            "description": "出力値の取得方法"
+          }
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "pre_checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "実行前チェック"
+        },
+        "post_checks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "実行後チェック"
+        }
+      }
+    }
+  }
+}

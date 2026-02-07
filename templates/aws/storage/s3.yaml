@@ -1,0 +1,162 @@
+metadata:
+  name: s3-bucket
+  description: S3バケットを作成するテンプレート
+  version: 1.0.0
+  provider: aws
+  category: storage
+  tags:
+    - s3
+    - storage
+    - object-storage
+
+parameters:
+  - name: bucket_name
+    type: string
+    description: S3バケット名（グローバルで一意である必要があります）
+    required: true
+    validation:
+      pattern: "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+      minLength: 3
+      maxLength: 63
+
+  - name: region
+    type: string
+    description: バケットを作成するAWSリージョン
+    required: false
+    default: us-east-1
+    validation:
+      enum:
+        - us-east-1
+        - us-west-2
+        - ap-northeast-1
+        - ap-northeast-3
+        - eu-west-1
+
+  - name: versioning
+    type: boolean
+    description: バージョニングを有効にするかどうか
+    required: false
+    default: false
+
+  - name: public_access_block
+    type: boolean
+    description: パブリックアクセスをブロックするかどうか
+    required: false
+    default: true
+
+  - name: tags
+    type: object
+    description: バケットに付与するタグ
+    required: false
+    default: {}
+
+resources:
+  commands:
+    create:
+      - name: create_bucket
+        description: S3バケットを作成
+        command: |
+          aws s3 mb s3://{{bucket_name}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+      - name: configure_versioning
+        description: バージョニング設定
+        condition: "{{versioning}}"
+        command: |
+          aws s3api put-bucket-versioning \
+            --bucket {{bucket_name}} \
+            --versioning-configuration Status=Enabled \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+      - name: configure_public_access_block
+        description: パブリックアクセスブロック設定
+        condition: "{{public_access_block}}"
+        command: |
+          aws s3api put-public-access-block \
+            --bucket {{bucket_name}} \
+            --public-access-block-configuration \
+              "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+      - name: add_tags
+        description: タグを追加
+        condition: "{{tags}}"
+        command: |
+          aws s3api put-bucket-tagging \
+            --bucket {{bucket_name}} \
+            --tagging 'TagSet={{tags_json}}' \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+    delete:
+      - name: delete_bucket
+        description: S3バケットを削除（バケットは空である必要があります）
+        command: |
+          aws s3 rb s3://{{bucket_name}} \
+            --force \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+    query:
+      - name: list_buckets
+        description: すべてのバケットを一覧表示
+        command: |
+          aws s3 ls \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+      - name: get_bucket_info
+        description: バケット情報を取得
+        command: |
+          aws s3api head-bucket \
+            --bucket {{bucket_name}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} && \
+          aws s3api get-bucket-location \
+            --bucket {{bucket_name}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+outputs:
+  - name: bucket_name
+    description: 作成されたバケット名
+    value: "{{bucket_name}}"
+
+  - name: bucket_arn
+    description: バケットのARN
+    value: "arn:aws:s3:::{{bucket_name}}"
+
+  - name: bucket_url
+    description: バケットのURL
+    value: "s3://{{bucket_name}}"
+
+validation:
+  pre_checks:
+    - バケット名がDNS準拠であること
+    - AWS認証情報が設定されていること
+    - 必要なIAM権限があること（s3:CreateBucket、s3:PutBucketVersioning等）
+
+  post_checks:
+    - バケットが正常に作成されたこと
+    - 設定したバージョニング状態が反映されていること
+    - パブリックアクセスブロックが正しく設定されていること
+
+examples:
+  - name: 基本的なバケット作成
+    description: 最小限の設定でS3バケットを作成
+    parameters:
+      bucket_name: my-test-bucket-12345
+      region: us-east-1
+
+  - name: バージョニング有効でバケット作成
+    description: バージョニングを有効にしたバケットを作成
+    parameters:
+      bucket_name: my-versioned-bucket-12345
+      region: us-east-1
+      versioning: true
+      tags:
+        Environment: Development
+        Project: SuperClaude
+
+  - name: LocalStack環境でのバケット作成
+    description: LocalStackに対してバケットを作成
+    parameters:
+      bucket_name: localstack-test-bucket
+      region: us-east-1
+      endpoint_url: http://localhost:4566

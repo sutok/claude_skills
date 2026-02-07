@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: superclaude-localstack
+    ports:
+      - "4566:4566"      # LocalStack Gateway
+      - "4571:4571"      # LocalStack Edge (legacy)
+    environment:
+      - SERVICES=s3,ec2,lambda,dynamodb,cloudformation,iam,sts,secretsmanager,ssm
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - LAMBDA_EXECUTOR=docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "./localstack-data:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - superclaude-network
+
+networks:
+  superclaude-network:
+    driver: bridge

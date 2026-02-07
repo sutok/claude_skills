@@ -1,0 +1,310 @@
+metadata:
+  name: virtual-machine
+  description: Azure仮想マシンを作成するテンプレート
+  version: 1.0.0
+  provider: azure
+  category: compute
+  tags:
+    - vm
+    - compute
+    - virtual-machine
+
+parameters:
+  - name: vm_name
+    type: string
+    description: 仮想マシン名
+    required: true
+    validation:
+      pattern: "^[a-zA-Z0-9-]{1,64}$"
+      minLength: 1
+      maxLength: 64
+
+  - name: resource_group
+    type: string
+    description: リソースグループ名
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 90
+
+  - name: location
+    type: string
+    description: デプロイ先のAzureリージョン
+    required: true
+    validation:
+      enum:
+        - japaneast
+        - japanwest
+        - eastus
+        - westus2
+        - westeurope
+
+  - name: size
+    type: string
+    description: VMサイズ
+    required: false
+    default: Standard_B1s
+    validation:
+      enum:
+        - Standard_B1s
+        - Standard_B2s
+        - Standard_D2s_v3
+        - Standard_D4s_v3
+        - Standard_E2s_v3
+
+  - name: image
+    type: string
+    description: OSイメージ（UbuntuLTS、Win2019Datacenter等）
+    required: false
+    default: UbuntuLTS
+
+  - name: admin_username
+    type: string
+    description: 管理者ユーザー名
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 32
+
+  - name: authentication_type
+    type: string
+    description: 認証方式（ssh または password）
+    required: false
+    default: ssh
+    validation:
+      enum:
+        - ssh
+        - password
+
+  - name: admin_password
+    type: string
+    description: 管理者パスワード（authentication_type=passwordの場合）
+    required: false
+    validation:
+      minLength: 12
+      maxLength: 123
+
+  - name: ssh_key_value
+    type: string
+    description: SSH公開鍵（authentication_type=sshの場合）
+    required: false
+
+  - name: vnet_name
+    type: string
+    description: 仮想ネットワーク名（既存のVNetを使用、または新規作成）
+    required: false
+
+  - name: subnet_name
+    type: string
+    description: サブネット名
+    required: false
+
+  - name: public_ip
+    type: boolean
+    description: パブリックIPアドレスを割り当てるかどうか
+    required: false
+    default: true
+
+  - name: nsg_rule
+    type: string
+    description: ネットワークセキュリティグループのルール（SSH、RDP等）
+    required: false
+    default: SSH
+    validation:
+      enum:
+        - SSH
+        - RDP
+        - NONE
+
+  - name: os_disk_size_gb
+    type: number
+    description: OSディスクサイズ（GB）
+    required: false
+    validation:
+      min: 30
+      max: 2048
+
+  - name: tags
+    type: object
+    description: VMに付与するタグ
+    required: false
+    default: {}
+
+resources:
+  commands:
+    create:
+      - name: create_vm
+        description: 仮想マシンを作成
+        command: |
+          az vm create \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}} \
+            --location {{location}} \
+            --size {{size}} \
+            --image {{image}} \
+            --admin-username {{admin_username}} \
+            {{#if authentication_type_ssh}}--generate-ssh-keys{{/if}} \
+            {{#if ssh_key_value}}--ssh-key-values "{{ssh_key_value}}"{{/if}} \
+            {{#if admin_password}}--admin-password "{{admin_password}}"{{/if}} \
+            {{#if vnet_name}}--vnet-name {{vnet_name}}{{/if}} \
+            {{#if subnet_name}}--subnet {{subnet_name}}{{/if}} \
+            {{#if public_ip}}--public-ip-address {{vm_name}}-ip{{else}}--public-ip-address ""{{/if}} \
+            {{#if nsg_rule_not_none}}--nsg-rule {{nsg_rule}}{{/if}} \
+            {{#if os_disk_size_gb}}--os-disk-size-gb {{os_disk_size_gb}}{{/if}} \
+            {{#if tags}}--tags {{tags_string}}{{/if}} \
+            --output json
+
+    delete:
+      - name: delete_vm
+        description: 仮想マシンと関連リソースを削除
+        command: |
+          az vm delete \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}} \
+            --yes
+
+      - name: delete_associated_resources
+        description: 関連リソース（NIC、ディスク、パブリックIP）を削除
+        command: |
+          # NICを削除
+          az network nic delete \
+            --name {{vm_name}}VMNic \
+            --resource-group {{resource_group}} 2>/dev/null || true
+
+          # パブリックIPを削除
+          az network public-ip delete \
+            --name {{vm_name}}-ip \
+            --resource-group {{resource_group}} 2>/dev/null || true
+
+          # OSディスクを削除
+          az disk delete \
+            --name {{vm_name}}_OsDisk_* \
+            --resource-group {{resource_group}} \
+            --yes 2>/dev/null || true
+
+    query:
+      - name: show_vm
+        description: VM情報を取得
+        command: |
+          az vm show \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: get_vm_ip
+        description: VMのIPアドレスを取得
+        command: |
+          az vm list-ip-addresses \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}} \
+            --output table
+
+      - name: get_vm_status
+        description: VMの実行状態を取得
+        command: |
+          az vm get-instance-view \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}} \
+            --query instanceView.statuses[1].displayStatus \
+            --output tsv
+
+    configure:
+      - name: start_vm
+        description: VMを起動
+        command: |
+          az vm start \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}}
+
+      - name: stop_vm
+        description: VMを停止（課金継続）
+        command: |
+          az vm stop \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}}
+
+      - name: deallocate_vm
+        description: VMを割り当て解除（課金停止）
+        command: |
+          az vm deallocate \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}}
+
+      - name: restart_vm
+        description: VMを再起動
+        command: |
+          az vm restart \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}}
+
+      - name: resize_vm
+        description: VMサイズを変更
+        command: |
+          az vm resize \
+            --name {{vm_name}} \
+            --resource-group {{resource_group}} \
+            --size {{new_size}}
+
+outputs:
+  - name: vm_id
+    description: 仮想マシンのリソースID
+    value: "id"
+
+  - name: public_ip_address
+    description: パブリックIPアドレス
+    value: "publicIpAddress"
+
+  - name: private_ip_address
+    description: プライベートIPアドレス
+    value: "privateIpAddress"
+
+  - name: fqdn
+    description: 完全修飾ドメイン名
+    value: "fqdn"
+
+validation:
+  pre_checks:
+    - リソースグループが存在すること
+    - Azure CLIでログイン済みであること
+    - 適切なサブスクリプションが選択されていること
+    - VM名がリソースグループ内で一意であること
+    - 必要な権限があること（Microsoft.Compute/virtualMachines/write）
+    - authentication_type=sshの場合、ssh_key_valueまたはSSH鍵生成が指定されていること
+    - authentication_type=passwordの場合、admin_passwordが指定されていること
+
+  post_checks:
+    - VMが正常に作成されたこと
+    - VMが実行中状態であること
+    - ネットワーク設定が正しく反映されていること
+    - 指定したタグが適用されていること
+
+examples:
+  - name: Ubuntu VMの作成（SSH認証）
+    description: SSH認証でUbuntu VMを作成
+    parameters:
+      vm_name: ubuntu-vm-01
+      resource_group: my-resource-group
+      location: japaneast
+      size: Standard_B2s
+      image: UbuntuLTS
+      admin_username: azureuser
+      authentication_type: ssh
+      public_ip: true
+      nsg_rule: SSH
+
+  - name: Windows Server VMの作成
+    description: パスワード認証でWindows Server VMを作成
+    parameters:
+      vm_name: win-vm-01
+      resource_group: my-resource-group
+      location: japaneast
+      size: Standard_D2s_v3
+      image: Win2019Datacenter
+      admin_username: adminuser
+      authentication_type: password
+      admin_password: "SecureP@ssw0rd123!"
+      public_ip: true
+      nsg_rule: RDP
+      tags:
+        Environment: Development
+        OS: Windows

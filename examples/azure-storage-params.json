@@ -1,0 +1,15 @@
+{
+  "account_name": "superclaudestore01",
+  "resource_group": "superclaude-rg",
+  "location": "japaneast",
+  "sku": "Standard_LRS",
+  "kind": "StorageV2",
+  "access_tier": "Hot",
+  "enable_https_only": true,
+  "minimum_tls_version": "TLS1_2",
+  "tags": {
+    "Environment": "Development",
+    "Project": "SuperClaude",
+    "CostCenter": "IT-DEV"
+  }
+}

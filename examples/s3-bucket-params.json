@@ -1,0 +1,12 @@
+{
+  "bucket_name": "my-superclaude-bucket",
+  "region": "us-east-1",
+  "versioning": true,
+  "public_access_block": true,
+  "tags": {
+    "Environment": "Development",
+    "Project": "SuperClaude",
+    "ManagedBy": "Template"
+  },
+  "endpoint_url": "http://localhost:4566"
+}

@@ -1,0 +1,233 @@
+metadata:
+  name: storage-account
+  description: Azureストレージアカウントを作成するテンプレート
+  version: 1.0.0
+  provider: azure
+  category: storage
+  tags:
+    - storage
+    - blob
+    - azure-storage
+
+parameters:
+  - name: account_name
+    type: string
+    description: ストレージアカウント名（グローバルで一意、3-24文字の小文字と数字のみ）
+    required: true
+    validation:
+      pattern: "^[a-z0-9]{3,24}$"
+      minLength: 3
+      maxLength: 24
+
+  - name: resource_group
+    type: string
+    description: リソースグループ名
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 90
+
+  - name: location
+    type: string
+    description: デプロイ先のAzureリージョン
+    required: true
+    validation:
+      enum:
+        - japaneast
+        - japanwest
+        - eastus
+        - westus2
+        - westeurope
+
+  - name: sku
+    type: string
+    description: ストレージアカウントのSKU
+    required: false
+    default: Standard_LRS
+    validation:
+      enum:
+        - Standard_LRS
+        - Standard_GRS
+        - Standard_RAGRS
+        - Standard_ZRS
+        - Premium_LRS
+
+  - name: kind
+    type: string
+    description: ストレージアカウントの種類
+    required: false
+    default: StorageV2
+    validation:
+      enum:
+        - Storage
+        - StorageV2
+        - BlobStorage
+        - FileStorage
+        - BlockBlobStorage
+
+  - name: access_tier
+    type: string
+    description: アクセス層（BlobStorageとStorageV2のみ）
+    required: false
+    default: Hot
+    validation:
+      enum:
+        - Hot
+        - Cool
+
+  - name: enable_https_only
+    type: boolean
+    description: HTTPS通信のみを許可するかどうか
+    required: false
+    default: true
+
+  - name: minimum_tls_version
+    type: string
+    description: 最小TLSバージョン
+    required: false
+    default: TLS1_2
+    validation:
+      enum:
+        - TLS1_0
+        - TLS1_1
+        - TLS1_2
+
+  - name: tags
+    type: object
+    description: ストレージアカウントに付与するタグ
+    required: false
+    default: {}
+
+resources:
+  commands:
+    create:
+      - name: create_storage_account
+        description: ストレージアカウントを作成
+        command: |
+          az storage account create \
+            --name {{account_name}} \
+            --resource-group {{resource_group}} \
+            --location {{location}} \
+            --sku {{sku}} \
+            --kind {{kind}} \
+            {{#if access_tier}}--access-tier {{access_tier}}{{/if}} \
+            {{#if enable_https_only}}--https-only true{{/if}} \
+            --min-tls-version {{minimum_tls_version}} \
+            {{#if tags}}--tags {{tags_string}}{{/if}} \
+            --output json
+
+      - name: enable_blob_versioning
+        description: Blobバージョニングを有効化（オプション）
+        command: |
+          az storage account blob-service-properties update \
+            --account-name {{account_name}} \
+            --resource-group {{resource_group}} \
+            --enable-versioning true
+
+    delete:
+      - name: delete_storage_account
+        description: ストレージアカウントを削除
+        command: |
+          az storage account delete \
+            --name {{account_name}} \
+            --resource-group {{resource_group}} \
+            --yes
+
+    query:
+      - name: show_storage_account
+        description: ストレージアカウント情報を取得
+        command: |
+          az storage account show \
+            --name {{account_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: list_keys
+        description: ストレージアカウントのアクセスキーを取得
+        command: |
+          az storage account keys list \
+            --account-name {{account_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: get_connection_string
+        description: 接続文字列を取得
+        command: |
+          az storage account show-connection-string \
+            --name {{account_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+    configure:
+      - name: update_sku
+        description: SKUを変更
+        command: |
+          az storage account update \
+            --name {{account_name}} \
+            --resource-group {{resource_group}} \
+            --sku {{new_sku}}
+
+      - name: update_tags
+        description: タグを更新
+        command: |
+          az storage account update \
+            --name {{account_name}} \
+            --resource-group {{resource_group}} \
+            --tags {{tags_string}}
+
+outputs:
+  - name: account_name
+    description: ストレージアカウント名
+    value: "{{account_name}}"
+
+  - name: primary_endpoint
+    description: プライマリBlobエンドポイント
+    value: "primaryEndpoints.blob"
+
+  - name: account_id
+    description: ストレージアカウントのリソースID
+    value: "id"
+
+  - name: primary_key
+    description: プライマリアクセスキー（要別途取得）
+    value: "keys[0].value"
+
+validation:
+  pre_checks:
+    - アカウント名がグローバルで一意であること
+    - リソースグループが存在すること
+    - Azure CLIでログイン済みであること
+    - 適切なサブスクリプションが選択されていること
+    - 必要な権限があること（Microsoft.Storage/storageAccounts/write）
+
+  post_checks:
+    - ストレージアカウントが正常に作成されたこと
+    - 指定したSKUとkindが反映されていること
+    - HTTPS通信のみが有効になっていること
+    - タグが正しく適用されていること
+
+examples:
+  - name: 基本的なストレージアカウント作成
+    description: 標準的な設定でストレージアカウントを作成
+    parameters:
+      account_name: mystorageacct001
+      resource_group: my-resource-group
+      location: japaneast
+      sku: Standard_LRS
+      kind: StorageV2
+
+  - name: 本番環境用ストレージアカウント
+    description: 高可用性構成でストレージアカウントを作成
+    parameters:
+      account_name: prodstorageacct001
+      resource_group: production-rg
+      location: japaneast
+      sku: Standard_GRS
+      kind: StorageV2
+      access_tier: Hot
+      enable_https_only: true
+      minimum_tls_version: TLS1_2
+      tags:
+        Environment: Production
+        Project: SuperClaude
+        CostCenter: IT-001

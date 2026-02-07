@@ -1,0 +1,234 @@
+metadata:
+  name: ec2-instance
+  description: EC2インスタンスを起動するテンプレート
+  version: 1.0.0
+  provider: aws
+  category: compute
+  tags:
+    - ec2
+    - compute
+    - virtual-machine
+
+parameters:
+  - name: instance_name
+    type: string
+    description: インスタンス名（Nameタグとして設定）
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 255
+
+  - name: instance_type
+    type: string
+    description: インスタンスタイプ
+    required: false
+    default: t2.micro
+    validation:
+      enum:
+        - t2.micro
+        - t2.small
+        - t2.medium
+        - t3.micro
+        - t3.small
+        - t3.medium
+
+  - name: ami_id
+    type: string
+    description: AMI ID（Amazon Machine Image）
+    required: true
+    validation:
+      pattern: "^ami-[a-z0-9]{8,17}$"
+
+  - name: key_name
+    type: string
+    description: SSH鍵ペア名
+    required: false
+
+  - name: security_group_ids
+    type: array
+    description: セキュリティグループID（複数指定可）
+    required: false
+    default: []
+
+  - name: subnet_id
+    type: string
+    description: サブネットID
+    required: false
+
+  - name: associate_public_ip
+    type: boolean
+    description: パブリックIPアドレスを割り当てるかどうか
+    required: false
+    default: false
+
+  - name: user_data
+    type: string
+    description: 起動時に実行するユーザーデータスクリプト
+    required: false
+
+  - name: tags
+    type: object
+    description: インスタンスに付与するタグ
+    required: false
+    default: {}
+
+  - name: region
+    type: string
+    description: インスタンスを起動するAWSリージョン
+    required: false
+    default: us-east-1
+
+resources:
+  commands:
+    create:
+      - name: run_instance
+        description: EC2インスタンスを起動
+        command: |
+          aws ec2 run-instances \
+            --image-id {{ami_id}} \
+            --instance-type {{instance_type}} \
+            --region {{region}} \
+            {{#if key_name}}--key-name {{key_name}}{{/if}} \
+            {{#if security_group_ids}}--security-group-ids {{security_group_ids}}{{/if}} \
+            {{#if subnet_id}}--subnet-id {{subnet_id}}{{/if}} \
+            {{#if associate_public_ip}}--associate-public-ip-address{{/if}} \
+            {{#if user_data}}--user-data file://{{user_data}}{{/if}} \
+            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value={{instance_name}}}{{#each tags}},{Key={{@key}},Value={{this}}}{{/each}}]' \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output json
+
+      - name: wait_for_running
+        description: インスタンスが起動するまで待機
+        command: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values={{instance_name}}" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output text) && \
+          aws ec2 wait instance-running \
+            --instance-ids $INSTANCE_ID \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+    delete:
+      - name: terminate_instance
+        description: EC2インスタンスを終了
+        command: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values={{instance_name}}" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output text) && \
+          aws ec2 terminate-instances \
+            --instance-ids $INSTANCE_ID \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+    query:
+      - name: describe_instance
+        description: インスタンス情報を取得
+        command: |
+          aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values={{instance_name}}" \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output json
+
+      - name: get_instance_status
+        description: インスタンスのステータスを取得
+        command: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values={{instance_name}}" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output text) && \
+          aws ec2 describe-instance-status \
+            --instance-ids $INSTANCE_ID \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output json
+
+    configure:
+      - name: stop_instance
+        description: インスタンスを停止
+        command: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values={{instance_name}}" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output text) && \
+          aws ec2 stop-instances \
+            --instance-ids $INSTANCE_ID \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+      - name: start_instance
+        description: インスタンスを起動
+        command: |
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values={{instance_name}}" \
+            --query 'Reservations[0].Instances[0].InstanceId' \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output text) && \
+          aws ec2 start-instances \
+            --instance-ids $INSTANCE_ID \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+outputs:
+  - name: instance_id
+    description: インスタンスID
+    value: "Reservations[0].Instances[0].InstanceId"
+
+  - name: public_ip
+    description: パブリックIPアドレス
+    value: "Reservations[0].Instances[0].PublicIpAddress"
+
+  - name: private_ip
+    description: プライベートIPアドレス
+    value: "Reservations[0].Instances[0].PrivateIpAddress"
+
+  - name: instance_state
+    description: インスタンスの状態
+    value: "Reservations[0].Instances[0].State.Name"
+
+validation:
+  pre_checks:
+    - AMI IDが有効であること
+    - インスタンスタイプが指定リージョンで利用可能であること
+    - AWS認証情報が設定されていること
+    - 必要なIAM権限があること（ec2:RunInstances、ec2:CreateTags等）
+    - 指定されたセキュリティグループが存在すること
+    - 指定されたサブネットが存在すること
+
+  post_checks:
+    - インスタンスが正常に起動したこと
+    - 指定したタグが適用されていること
+    - ネットワーク設定が正しく反映されていること
+
+examples:
+  - name: 基本的なEC2インスタンス起動
+    description: 最小限の設定でEC2インスタンスを起動
+    parameters:
+      instance_name: test-instance
+      ami_id: ami-0c55b159cbfafe1f0
+      instance_type: t2.micro
+      region: us-east-1
+
+  - name: パブリックIPを持つインスタンス起動
+    description: パブリックIPアドレスを割り当ててインスタンスを起動
+    parameters:
+      instance_name: web-server
+      ami_id: ami-0c55b159cbfafe1f0
+      instance_type: t2.small
+      associate_public_ip: true
+      security_group_ids:
+        - sg-0123456789abcdef0
+      tags:
+        Environment: Production
+        Role: WebServer
