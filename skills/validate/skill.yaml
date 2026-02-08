@@ -1,0 +1,89 @@
+name: validate-template
+version: 1.0.0
+description: テンプレートとパラメータを検証します（構文チェック、パラメータ検証、セキュリティチェック）
+category: infrastructure
+provider: multi-cloud
+
+metadata:
+  author: SuperClaude
+  tags:
+    - validate
+    - check
+    - verify
+    - lint
+    - security
+    - infrastructure
+  supported_providers:
+    - aws
+    - azure
+
+parameters:
+  - name: template
+    type: string
+    description: 検証するテンプレート名またはパス
+    required: true
+
+  - name: params
+    type: object
+    description: 検証するパラメータ
+    required: false
+    default: {}
+
+  - name: validation_level
+    type: string
+    description: 検証レベル
+    required: false
+    default: standard
+    enum:
+      - basic      # 基本的な構文チェックのみ
+      - standard   # 標準検証（構文+パラメータ）
+      - strict     # 厳格な検証（セキュリティチェック含む）
+
+  - name: check_security
+    type: boolean
+    description: セキュリティチェックを実行するか
+    required: false
+    default: false
+
+  - name: check_best_practices
+    type: boolean
+    description: ベストプラクティスに準拠しているかチェック
+    required: false
+    default: false
+
+outputs:
+  - name: is_valid
+    type: boolean
+    description: 検証結果（true=成功、false=失敗）
+
+  - name: validation_errors
+    type: array
+    description: 検証エラーのリスト
+
+  - name: validation_warnings
+    type: array
+    description: 検証警告のリスト
+
+  - name: suggestions
+    type: array
+    description: 改善提案のリスト
+
+examples:
+  - name: テンプレート構文チェック
+    input:
+      template: aws/compute/ec2
+      validation_level: basic
+
+  - name: パラメータ付き完全検証
+    input:
+      template: azure/compute/vm
+      params:
+        vm_name: test-vm
+        resource_group: my-rg
+      validation_level: strict
+      check_security: true
+
+handler:
+  type: bash
+  script: ./validate.sh
+  timeout: 120000

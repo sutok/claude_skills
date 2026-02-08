@@ -1,0 +1,342 @@
+metadata:
+  name: virtual-network
+  description: Azure Virtual Network (VNet)を作成するテンプレート
+  version: 1.0.0
+  provider: azure
+  category: network
+  tags:
+    - vnet
+    - network
+    - networking
+    - virtual-network
+
+parameters:
+  - name: vnet_name
+    type: string
+    description: VNet名
+    required: true
+    validation:
+      pattern: "^[a-zA-Z0-9-_]{1,64}$"
+      minLength: 1
+      maxLength: 64
+
+  - name: resource_group
+    type: string
+    description: リソースグループ名
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 90
+
+  - name: location
+    type: string
+    description: デプロイ先のAzureリージョン
+    required: true
+    validation:
+      enum:
+        - japaneast
+        - japanwest
+        - eastus
+        - eastus2
+        - westus2
+        - westus3
+        - westeurope
+        - northeurope
+
+  - name: address_prefixes
+    type: array
+    description: VNetのアドレスプレフィックス（CIDR表記）
+    required: true
+    validation:
+      minItems: 1
+
+  - name: subnets
+    type: array
+    description: サブネット設定（名前、アドレスプレフィックス）
+    required: false
+    default: []
+
+  - name: dns_servers
+    type: array
+    description: カスタムDNSサーバーのIPアドレス
+    required: false
+    default: []
+
+  - name: enable_ddos_protection
+    type: boolean
+    description: DDoS Protection Standardを有効化
+    required: false
+    default: false
+
+  - name: enable_vm_protection
+    type: boolean
+    description: VM保護を有効化
+    required: false
+    default: false
+
+  - name: tags
+    type: object
+    description: VNetに付与するタグ
+    required: false
+    default: {}
+
+resources:
+  commands:
+    create:
+      - name: create_vnet
+        description: VNetを作成
+        command: |
+          az network vnet create \
+            --name {{vnet_name}} \
+            --resource-group {{resource_group}} \
+            --location {{location}} \
+            --address-prefixes {{address_prefixes_string}} \
+            {{#if dns_servers}}--dns-servers {{dns_servers_string}}{{/if}} \
+            {{#if enable_ddos_protection}}--ddos-protection true{{/if}} \
+            {{#if enable_vm_protection}}--vm-protection true{{/if}} \
+            {{#if tags}}--tags {{tags_string}}{{/if}} \
+            --output json
+
+      - name: create_subnets
+        description: サブネットを作成
+        condition: "{{subnets}}"
+        command: |
+          {{#each subnets}}
+          az network vnet subnet create \
+            --name {{this.name}} \
+            --resource-group {{../resource_group}} \
+            --vnet-name {{../vnet_name}} \
+            --address-prefixes {{this.address_prefix}} \
+            {{#if this.network_security_group}}--network-security-group {{this.network_security_group}}{{/if}} \
+            {{#if this.service_endpoints}}--service-endpoints {{this.service_endpoints}}{{/if}} \
+            --output json && \
+          {{/each}}
+          echo "All subnets created"
+
+      - name: create_nsg
+        description: ネットワークセキュリティグループを作成（オプション）
+        condition: "{{create_nsg}}"
+        command: |
+          az network nsg create \
+            --name {{vnet_name}}-nsg \
+            --resource-group {{resource_group}} \
+            --location {{location}} \
+            {{#if tags}}--tags {{tags_string}}{{/if}}
+
+    delete:
+      - name: delete_vnet
+        description: VNetを削除（サブネットも自動削除される）
+        command: |
+          az network vnet delete \
+            --name {{vnet_name}} \
+            --resource-group {{resource_group}}
+
+    query:
+      - name: show_vnet
+        description: VNet情報を取得
+        command: |
+          az network vnet show \
+            --name {{vnet_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: list_vnets
+        description: リソースグループ内のすべてのVNetを一覧表示
+        command: |
+          az network vnet list \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: list_subnets
+        description: VNet内のサブネット一覧を取得
+        command: |
+          az network vnet subnet list \
+            --vnet-name {{vnet_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: show_subnet
+        description: 特定のサブネット情報を取得
+        command: |
+          az network vnet subnet show \
+            --name {{subnet_name}} \
+            --vnet-name {{vnet_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: list_available_ips
+        description: サブネット内の利用可能なIPアドレスを一覧表示
+        command: |
+          az network vnet subnet list-available-ips \
+            --name {{subnet_name}} \
+            --vnet-name {{vnet_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+    configure:
+      - name: update_address_space
+        description: アドレス空間を更新
+        command: |
+          az network vnet update \
+            --name {{vnet_name}} \
+            --resource-group {{resource_group}} \
+            --address-prefixes {{new_address_prefixes_string}}
+
+      - name: update_dns_servers
+        description: DNSサーバーを更新
+        command: |
+          az network vnet update \
+            --name {{vnet_name}} \
+            --resource-group {{resource_group}} \
+            --dns-servers {{new_dns_servers_string}}
+
+      - name: add_subnet
+        description: 新しいサブネットを追加
+        command: |
+          az network vnet subnet create \
+            --name {{new_subnet_name}} \
+            --resource-group {{resource_group}} \
+            --vnet-name {{vnet_name}} \
+            --address-prefixes {{new_subnet_address_prefix}} \
+            {{#if new_subnet_nsg}}--network-security-group {{new_subnet_nsg}}{{/if}}
+
+      - name: delete_subnet
+        description: サブネットを削除
+        command: |
+          az network vnet subnet delete \
+            --name {{subnet_name}} \
+            --vnet-name {{vnet_name}} \
+            --resource-group {{resource_group}}
+
+      - name: update_subnet_nsg
+        description: サブネットにNSGを関連付け
+        command: |
+          az network vnet subnet update \
+            --name {{subnet_name}} \
+            --vnet-name {{vnet_name}} \
+            --resource-group {{resource_group}} \
+            --network-security-group {{nsg_name}}
+
+      - name: create_peering
+        description: VNetピアリングを作成
+        command: |
+          az network vnet peering create \
+            --name {{peering_name}} \
+            --resource-group {{resource_group}} \
+            --vnet-name {{vnet_name}} \
+            --remote-vnet {{remote_vnet_id}} \
+            --allow-vnet-access
+
+outputs:
+  - name: vnet_id
+    description: VNetのリソースID
+    value: "id"
+
+  - name: vnet_name
+    description: VNet名
+    value: "name"
+
+  - name: address_space
+    description: アドレス空間
+    value: "addressSpace.addressPrefixes"
+
+  - name: subnets
+    description: サブネット一覧
+    value: "subnets"
+
+  - name: provisioning_state
+    description: プロビジョニング状態
+    value: "provisioningState"
+
+validation:
+  pre_checks:
+    - Azure CLIでログイン済みであること
+    - リソースグループが存在すること
+    - 適切なサブスクリプションが選択されていること
+    - 必要な権限があること（Microsoft.Network/virtualNetworks/write）
+    - VNet名がリソースグループ内で一意であること
+    - アドレスプレフィックスがRFC1918準拠であること
+    - サブネットのアドレスプレフィックスがVNetの範囲内であること
+    - サブネットのアドレス範囲が重複していないこと
+
+  post_checks:
+    - VNetが正常に作成されたこと
+    - 指定したアドレス空間が反映されていること
+    - サブネットが正常に作成されたこと（指定時）
+    - DNSサーバー設定が反映されていること（指定時）
+    - タグが正しく適用されていること
+
+examples:
+  - name: 基本的なVNet作成
+    description: シンプルなVNetを作成
+    parameters:
+      vnet_name: my-vnet
+      resource_group: my-resource-group
+      location: japaneast
+      address_prefixes:
+        - 10.0.0.0/16
+
+  - name: サブネット付きVNet作成
+    description: 複数のサブネットを持つVNetを作成
+    parameters:
+      vnet_name: production-vnet
+      resource_group: production-rg
+      location: japaneast
+      address_prefixes:
+        - 10.0.0.0/16
+      subnets:
+        - name: frontend-subnet
+          address_prefix: 10.0.1.0/24
+        - name: backend-subnet
+          address_prefix: 10.0.2.0/24
+        - name: database-subnet
+          address_prefix: 10.0.3.0/24
+      tags:
+        Environment: Production
+        Project: SuperClaude
+
+  - name: カスタムDNS付きVNet
+    description: カスタムDNSサーバーを使用するVNetを作成
+    parameters:
+      vnet_name: corporate-vnet
+      resource_group: corp-rg
+      location: japaneast
+      address_prefixes:
+        - 172.16.0.0/12
+      dns_servers:
+        - 172.16.0.10
+        - 172.16.0.11
+      subnets:
+        - name: workload-subnet
+          address_prefix: 172.16.1.0/24
+          service_endpoints: Microsoft.Storage,Microsoft.Sql
+      tags:
+        Environment: Production
+        Department: IT
+        Compliance: Required
+
+  - name: 高セキュリティVNet
+    description: DDoS保護とVM保護を有効にしたVNet
+    parameters:
+      vnet_name: secure-vnet
+      resource_group: security-rg
+      location: japaneast
+      address_prefixes:
+        - 10.100.0.0/16
+      enable_ddos_protection: true
+      enable_vm_protection: true
+      subnets:
+        - name: dmz-subnet
+          address_prefix: 10.100.1.0/24
+          network_security_group: dmz-nsg
+        - name: app-subnet
+          address_prefix: 10.100.2.0/24
+          network_security_group: app-nsg
+        - name: data-subnet
+          address_prefix: 10.100.3.0/24
+          network_security_group: data-nsg
+      create_nsg: true
+      tags:
+        Environment: Production
+        SecurityLevel: High
+        Compliance: PCI-DSS

@@ -1,0 +1,126 @@
+name: provision-resource
+version: 1.0.0
+description: 新しいクラウドリソース（VM、ストレージ、ネットワーク等）をプロビジョニングします
+category: infrastructure
+provider: multi-cloud
+
+metadata:
+  author: SuperClaude
+  tags:
+    - provision
+    - create
+    - infrastructure
+    - azure
+    - aws
+  supported_providers:
+    - aws
+    - azure
+
+parameters:
+  - name: provider
+    type: string
+    description: クラウドプロバイダー
+    required: true
+    enum:
+      - aws
+      - azure
+
+  - name: resource_type
+    type: string
+    description: リソースタイプ
+    required: true
+    enum:
+      - vm
+      - storage
+      - network
+      - compute
+
+  - name: template
+    type: string
+    description: 使用するテンプレート名またはパス
+    required: true
+    examples:
+      - azure/compute/vm
+      - aws/compute/ec2
+      - aws/storage/s3
+
+  - name: params
+    type: object
+    description: リソース作成パラメータ（テンプレートに応じて変動）
+    required: true
+
+  - name: environment
+    type: string
+    description: 環境（local=LocalStack、prod=本番環境）
+    required: false
+    default: local
+    enum:
+      - local
+      - prod
+
+  - name: dry_run
+    type: boolean
+    description: ドライラン（コマンド表示のみ、実行なし）
+    required: false
+    default: false
+
+  - name: wait_for_completion
+    type: boolean
+    description: リソース作成完了まで待機するか
+    required: false
+    default: true
+
+outputs:
+  - name: resource_id
+    type: string
+    description: 作成されたリソースのID
+
+  - name: resource_details
+    type: object
+    description: リソースの詳細情報
+
+  - name: status
+    type: string
+    description: 実行ステータス（success/failed/pending）
+
+  - name: commands_executed
+    type: array
+    description: 実行されたCLIコマンドのリスト
+
+examples:
+  - name: AWS EC2インスタンスの作成
+    description: LocalStackでEC2インスタンスを起動
+    input:
+      provider: aws
+      resource_type: compute
+      template: aws/compute/ec2
+      environment: local
+      params:
+        instance_name: test-instance
+        ami_id: ami-0c55b159cbfafe1f0
+        instance_type: t2.micro
+    expected_output:
+      status: success
+      resource_id: i-1234567890abcdef0
+
+  - name: Azure VMの作成
+    description: 本番環境でAzure VMを作成
+    input:
+      provider: azure
+      resource_type: vm
+      template: azure/compute/vm
+      environment: prod
+      params:
+        vm_name: production-vm
+        resource_group: my-rg
+        location: japaneast
+        size: Standard_B2s
+        admin_username: azureuser
+    expected_output:
+      status: success
+      resource_id: /subscriptions/.../virtualMachines/production-vm
+
+handler:
+  type: bash
+  script: ./provision.sh
+  timeout: 600000  # 10分

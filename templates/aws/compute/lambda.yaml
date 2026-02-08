@@ -1,0 +1,303 @@
+metadata:
+  name: lambda-function
+  description: AWS Lambda関数を作成するテンプレート
+  version: 1.0.0
+  provider: aws
+  category: compute
+  tags:
+    - lambda
+    - serverless
+    - compute
+
+parameters:
+  - name: function_name
+    type: string
+    description: Lambda関数名
+    required: true
+    validation:
+      pattern: "^[a-zA-Z0-9-_]{1,64}$"
+      minLength: 1
+      maxLength: 64
+
+  - name: runtime
+    type: string
+    description: ランタイム環境
+    required: true
+    validation:
+      enum:
+        - python3.9
+        - python3.10
+        - python3.11
+        - python3.12
+        - nodejs18.x
+        - nodejs20.x
+        - java17
+        - java21
+        - dotnet6
+        - dotnet8
+        - go1.x
+        - ruby3.2
+
+  - name: handler
+    type: string
+    description: ハンドラー関数（例：index.handler）
+    required: true
+    validation:
+      pattern: "^[a-zA-Z0-9._-]+$"
+
+  - name: role_arn
+    type: string
+    description: Lambda実行ロールのARN
+    required: true
+    validation:
+      pattern: "^arn:aws:iam::\\d{12}:role/.+$"
+
+  - name: code_file
+    type: string
+    description: デプロイパッケージのZIPファイルパス
+    required: false
+
+  - name: code_s3_bucket
+    type: string
+    description: デプロイパッケージを格納したS3バケット名
+    required: false
+
+  - name: code_s3_key
+    type: string
+    description: デプロイパッケージのS3キー
+    required: false
+
+  - name: memory_size
+    type: number
+    description: メモリサイズ（MB）
+    required: false
+    default: 128
+    validation:
+      min: 128
+      max: 10240
+
+  - name: timeout
+    type: number
+    description: タイムアウト時間（秒）
+    required: false
+    default: 3
+    validation:
+      min: 1
+      max: 900
+
+  - name: environment_variables
+    type: object
+    description: 環境変数
+    required: false
+    default: {}
+
+  - name: description
+    type: string
+    description: 関数の説明
+    required: false
+
+  - name: layers
+    type: array
+    description: Lambda LayerのARN配列
+    required: false
+    default: []
+
+  - name: vpc_config
+    type: object
+    description: VPC設定（SubnetIds、SecurityGroupIds）
+    required: false
+
+  - name: tags
+    type: object
+    description: タグ
+    required: false
+    default: {}
+
+  - name: region
+    type: string
+    description: デプロイ先のAWSリージョン
+    required: false
+    default: us-east-1
+
+resources:
+  commands:
+    create:
+      - name: create_function
+        description: Lambda関数を作成
+        command: |
+          aws lambda create-function \
+            --function-name {{function_name}} \
+            --runtime {{runtime}} \
+            --role {{role_arn}} \
+            --handler {{handler}} \
+            {{#if code_file}}--zip-file fileb://{{code_file}}{{/if}} \
+            {{#if code_s3_bucket}}--code S3Bucket={{code_s3_bucket}},S3Key={{code_s3_key}}{{/if}} \
+            --memory-size {{memory_size}} \
+            --timeout {{timeout}} \
+            {{#if description}}--description "{{description}}"{{/if}} \
+            {{#if environment_variables}}--environment Variables={{env_vars_json}}{{/if}} \
+            {{#if layers}}--layers {{layers_string}}{{/if}} \
+            {{#if vpc_config}}--vpc-config SubnetIds={{vpc_config.subnet_ids}},SecurityGroupIds={{vpc_config.security_group_ids}}{{/if}} \
+            {{#if tags}}--tags {{tags_string}}{{/if}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output json
+
+      - name: add_permission
+        description: Lambda関数に実行権限を追加（オプション）
+        condition: "{{add_permission}}"
+        command: |
+          aws lambda add-permission \
+            --function-name {{function_name}} \
+            --statement-id AllowInvoke \
+            --action lambda:InvokeFunction \
+            --principal {{principal}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+    delete:
+      - name: delete_function
+        description: Lambda関数を削除
+        command: |
+          aws lambda delete-function \
+            --function-name {{function_name}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+    query:
+      - name: get_function
+        description: 関数情報を取得
+        command: |
+          aws lambda get-function \
+            --function-name {{function_name}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output json
+
+      - name: list_functions
+        description: すべての関数を一覧表示
+        command: |
+          aws lambda list-functions \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output json
+
+      - name: get_function_configuration
+        description: 関数の設定を取得
+        command: |
+          aws lambda get-function-configuration \
+            --function-name {{function_name}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            --output json
+
+    configure:
+      - name: update_function_code
+        description: 関数コードを更新
+        command: |
+          aws lambda update-function-code \
+            --function-name {{function_name}} \
+            {{#if code_file}}--zip-file fileb://{{code_file}}{{/if}} \
+            {{#if code_s3_bucket}}--s3-bucket {{code_s3_bucket}} --s3-key {{code_s3_key}}{{/if}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+      - name: update_function_configuration
+        description: 関数設定を更新
+        command: |
+          aws lambda update-function-configuration \
+            --function-name {{function_name}} \
+            {{#if memory_size}}--memory-size {{memory_size}}{{/if}} \
+            {{#if timeout}}--timeout {{timeout}}{{/if}} \
+            {{#if environment_variables}}--environment Variables={{env_vars_json}}{{/if}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}}
+
+      - name: invoke_function
+        description: 関数を実行
+        command: |
+          aws lambda invoke \
+            --function-name {{function_name}} \
+            {{#if payload}}--payload '{{payload}}'{{/if}} \
+            --region {{region}} \
+            {{#if endpoint_url}}--endpoint-url {{endpoint_url}}{{/if}} \
+            response.json
+
+outputs:
+  - name: function_arn
+    description: 関数のARN
+    value: "Configuration.FunctionArn"
+
+  - name: function_name
+    description: 関数名
+    value: "Configuration.FunctionName"
+
+  - name: last_modified
+    description: 最終更新日時
+    value: "Configuration.LastModified"
+
+  - name: code_size
+    description: コードサイズ（バイト）
+    value: "Configuration.CodeSize"
+
+validation:
+  pre_checks:
+    - AWS認証情報が設定されていること
+    - IAM実行ロールが存在すること
+    - 必要なIAM権限があること（lambda:CreateFunction、lambda:GetFunction等）
+    - デプロイパッケージが準備されていること
+    - VPC設定を使用する場合、サブネットとセキュリティグループが存在すること
+
+  post_checks:
+    - 関数が正常に作成されたこと
+    - 設定したメモリサイズとタイムアウトが反映されていること
+    - 環境変数が正しく設定されていること
+    - VPC設定が正しく反映されていること（使用時）
+
+examples:
+  - name: 基本的なLambda関数作成
+    description: Python 3.11でシンプルなLambda関数を作成
+    parameters:
+      function_name: my-lambda-function
+      runtime: python3.11
+      handler: index.handler
+      role_arn: arn:aws:iam::123456789012:role/lambda-execution-role
+      code_file: ./function.zip
+      memory_size: 256
+      timeout: 30
+
+  - name: 環境変数付きLambda関数
+    description: 環境変数を設定したLambda関数を作成
+    parameters:
+      function_name: api-handler
+      runtime: nodejs20.x
+      handler: index.handler
+      role_arn: arn:aws:iam::123456789012:role/lambda-role
+      code_s3_bucket: my-lambda-code-bucket
+      code_s3_key: api-handler.zip
+      memory_size: 512
+      timeout: 60
+      environment_variables:
+        DB_HOST: db.example.com
+        API_KEY: "{{secrets.api_key}}"
+        LOG_LEVEL: info
+      tags:
+        Environment: Production
+        Application: API
+
+  - name: VPC内のLambda関数
+    description: VPC内で実行されるLambda関数を作成
+    parameters:
+      function_name: vpc-lambda
+      runtime: python3.12
+      handler: app.handler
+      role_arn: arn:aws:iam::123456789012:role/lambda-vpc-role
+      code_file: ./app.zip
+      memory_size: 1024
+      timeout: 120
+      vpc_config:
+        subnet_ids: subnet-12345,subnet-67890
+        security_group_ids: sg-abcdef123
+      tags:
+        Environment: Development
+        Purpose: Database-Access

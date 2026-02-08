@@ -1,0 +1,393 @@
+metadata:
+  name: aks-cluster
+  description: Azure Kubernetes Service (AKS)クラスターを作成するテンプレート
+  version: 1.0.0
+  provider: azure
+  category: compute
+  tags:
+    - aks
+    - kubernetes
+    - container
+    - orchestration
+
+parameters:
+  - name: cluster_name
+    type: string
+    description: AKSクラスター名
+    required: true
+    validation:
+      pattern: "^[a-zA-Z0-9-]{1,63}$"
+      minLength: 1
+      maxLength: 63
+
+  - name: resource_group
+    type: string
+    description: リソースグループ名
+    required: true
+    validation:
+      minLength: 1
+      maxLength: 90
+
+  - name: location
+    type: string
+    description: デプロイ先のAzureリージョン
+    required: true
+    validation:
+      enum:
+        - japaneast
+        - japanwest
+        - eastus
+        - eastus2
+        - westus2
+        - westus3
+        - westeurope
+        - northeurope
+
+  - name: node_count
+    type: number
+    description: 初期ノード数
+    required: false
+    default: 3
+    validation:
+      min: 1
+      max: 100
+
+  - name: node_vm_size
+    type: string
+    description: ノードのVMサイズ
+    required: false
+    default: Standard_DS2_v2
+    validation:
+      enum:
+        - Standard_B2s
+        - Standard_B2ms
+        - Standard_DS2_v2
+        - Standard_DS3_v2
+        - Standard_DS4_v2
+        - Standard_D4s_v3
+        - Standard_D8s_v3
+
+  - name: kubernetes_version
+    type: string
+    description: Kubernetesバージョン（例：1.28.3）
+    required: false
+
+  - name: enable_auto_scaling
+    type: boolean
+    description: 自動スケーリングを有効化
+    required: false
+    default: false
+
+  - name: min_count
+    type: number
+    description: 自動スケーリング時の最小ノード数
+    required: false
+    default: 1
+    validation:
+      min: 1
+      max: 100
+
+  - name: max_count
+    type: number
+    description: 自動スケーリング時の最大ノード数
+    required: false
+    default: 10
+    validation:
+      min: 1
+      max: 1000
+
+  - name: max_pods
+    type: number
+    description: ノードあたりの最大Pod数
+    required: false
+    default: 110
+    validation:
+      min: 10
+      max: 250
+
+  - name: network_plugin
+    type: string
+    description: ネットワークプラグイン
+    required: false
+    default: kubenet
+    validation:
+      enum:
+        - kubenet
+        - azure
+
+  - name: network_policy
+    type: string
+    description: ネットワークポリシー
+    required: false
+    validation:
+      enum:
+        - calico
+        - azure
+
+  - name: service_cidr
+    type: string
+    description: サービスCIDR
+    required: false
+    default: 10.0.0.0/16
+
+  - name: dns_service_ip
+    type: string
+    description: DNS サービスIP
+    required: false
+    default: 10.0.0.10
+
+  - name: enable_rbac
+    type: boolean
+    description: RBACを有効化
+    required: false
+    default: true
+
+  - name: enable_managed_identity
+    type: boolean
+    description: マネージドIDを使用
+    required: false
+    default: true
+
+  - name: enable_monitoring
+    type: boolean
+    description: Azure Monitorを有効化
+    required: false
+    default: true
+
+  - name: enable_azure_policy
+    type: boolean
+    description: Azure Policyアドオンを有効化
+    required: false
+    default: false
+
+  - name: load_balancer_sku
+    type: string
+    description: ロードバランサーのSKU
+    required: false
+    default: standard
+    validation:
+      enum:
+        - basic
+        - standard
+
+  - name: tags
+    type: object
+    description: クラスターに付与するタグ
+    required: false
+    default: {}
+
+resources:
+  commands:
+    create:
+      - name: create_aks_cluster
+        description: AKSクラスターを作成
+        command: |
+          az aks create \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --location {{location}} \
+            --node-count {{node_count}} \
+            --node-vm-size {{node_vm_size}} \
+            {{#if kubernetes_version}}--kubernetes-version {{kubernetes_version}}{{/if}} \
+            {{#if enable_auto_scaling}}--enable-cluster-autoscaler --min-count {{min_count}} --max-count {{max_count}}{{/if}} \
+            --max-pods {{max_pods}} \
+            --network-plugin {{network_plugin}} \
+            {{#if network_policy}}--network-policy {{network_policy}}{{/if}} \
+            --service-cidr {{service_cidr}} \
+            --dns-service-ip {{dns_service_ip}} \
+            {{#if enable_rbac}}--enable-rbac{{/if}} \
+            {{#if enable_managed_identity}}--enable-managed-identity{{/if}} \
+            {{#if enable_monitoring}}--enable-addons monitoring{{/if}} \
+            {{#if enable_azure_policy}}--enable-addons azure-policy{{/if}} \
+            --load-balancer-sku {{load_balancer_sku}} \
+            --generate-ssh-keys \
+            {{#if tags}}--tags {{tags_string}}{{/if}} \
+            --output json
+
+      - name: get_credentials
+        description: kubectl用の認証情報を取得
+        command: |
+          az aks get-credentials \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --overwrite-existing
+
+    delete:
+      - name: delete_aks_cluster
+        description: AKSクラスターを削除
+        command: |
+          az aks delete \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --yes \
+            --no-wait
+
+    query:
+      - name: show_cluster
+        description: クラスター情報を取得
+        command: |
+          az aks show \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: list_clusters
+        description: リソースグループ内のすべてのAKSクラスターを一覧表示
+        command: |
+          az aks list \
+            --resource-group {{resource_group}} \
+            --output json
+
+      - name: get_versions
+        description: 利用可能なKubernetesバージョンを取得
+        command: |
+          az aks get-versions \
+            --location {{location}} \
+            --output json
+
+      - name: get_node_pools
+        description: ノードプール一覧を取得
+        command: |
+          az aks nodepool list \
+            --cluster-name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --output json
+
+    configure:
+      - name: scale_cluster
+        description: クラスターをスケール
+        command: |
+          az aks scale \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --node-count {{new_node_count}}
+
+      - name: upgrade_cluster
+        description: Kubernetesバージョンをアップグレード
+        command: |
+          az aks upgrade \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --kubernetes-version {{new_kubernetes_version}} \
+            {{#if no_wait}}--no-wait{{/if}}
+
+      - name: stop_cluster
+        description: クラスターを停止（コスト削減）
+        command: |
+          az aks stop \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}}
+
+      - name: start_cluster
+        description: 停止したクラスターを開始
+        command: |
+          az aks start \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}}
+
+      - name: enable_autoscaling
+        description: 自動スケーリングを有効化
+        command: |
+          az aks update \
+            --name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --enable-cluster-autoscaler \
+            --min-count {{min_count}} \
+            --max-count {{max_count}}
+
+      - name: add_node_pool
+        description: ノードプールを追加
+        command: |
+          az aks nodepool add \
+            --cluster-name {{cluster_name}} \
+            --resource-group {{resource_group}} \
+            --name {{nodepool_name}} \
+            --node-count {{nodepool_node_count}} \
+            --node-vm-size {{nodepool_vm_size}}
+
+outputs:
+  - name: cluster_id
+    description: クラスターのリソースID
+    value: "id"
+
+  - name: fqdn
+    description: クラスターのFQDN
+    value: "fqdn"
+
+  - name: kubernetes_version
+    description: Kubernetesバージョン
+    value: "kubernetesVersion"
+
+  - name: provisioning_state
+    description: プロビジョニング状態
+    value: "provisioningState"
+
+  - name: node_resource_group
+    description: ノードリソースグループ名
+    value: "nodeResourceGroup"
+
+validation:
+  pre_checks:
+    - Azure CLIでログイン済みであること
+    - リソースグループが存在すること
+    - 適切なサブスクリプションが選択されていること
+    - 必要な権限があること（Microsoft.ContainerService/managedClusters/write）
+    - クラスター名がリソースグループ内で一意であること
+    - 選択したリージョンでAKSが利用可能であること
+    - 自動スケーリング有効時、min_count <= node_count <= max_count であること
+
+  post_checks:
+    - クラスターが正常に作成されたこと
+    - ノードプールが起動していること
+    - kubectl でクラスターにアクセスできること
+    - 指定したアドオンが有効になっていること
+    - タグが正しく適用されていること
+
+examples:
+  - name: 基本的なAKSクラスター作成
+    description: 最小限の設定でAKSクラスターを作成
+    parameters:
+      cluster_name: my-aks-cluster
+      resource_group: my-resource-group
+      location: japaneast
+      node_count: 3
+      node_vm_size: Standard_DS2_v2
+
+  - name: 本番環境用AKSクラスター
+    description: 自動スケーリングとモニタリングを有効にした本番環境用クラスター
+    parameters:
+      cluster_name: production-aks
+      resource_group: production-rg
+      location: japaneast
+      node_count: 5
+      node_vm_size: Standard_DS3_v2
+      kubernetes_version: 1.28.3
+      enable_auto_scaling: true
+      min_count: 3
+      max_count: 10
+      network_plugin: azure
+      network_policy: azure
+      enable_rbac: true
+      enable_managed_identity: true
+      enable_monitoring: true
+      load_balancer_sku: standard
+      tags:
+        Environment: Production
+        Project: SuperClaude
+        CostCenter: IT-001
+
+  - name: 開発環境用小規模クラスター
+    description: コストを抑えた開発環境用クラスター
+    parameters:
+      cluster_name: dev-aks
+      resource_group: dev-rg
+      location: japaneast
+      node_count: 1
+      node_vm_size: Standard_B2s
+      network_plugin: kubenet
+      enable_rbac: true
+      enable_managed_identity: true
+      enable_monitoring: false
+      tags:
+        Environment: Development
+        AutoShutdown: "true"

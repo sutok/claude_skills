@@ -1,0 +1,125 @@
+name: query-resource
+version: 1.0.0
+description: クラウドリソースの情報を取得します（VM、ストレージ、ネットワーク等の状態、設定、メトリクス）
+category: infrastructure
+provider: multi-cloud
+
+metadata:
+  author: SuperClaude
+  tags:
+    - query
+    - list
+    - describe
+    - show
+    - infrastructure
+    - azure
+    - aws
+  supported_providers:
+    - aws
+    - azure
+
+parameters:
+  - name: provider
+    type: string
+    description: クラウドプロバイダー
+    required: true
+    enum:
+      - aws
+      - azure
+
+  - name: resource_type
+    type: string
+    description: リソースタイプ
+    required: true
+    enum:
+      - vm
+      - storage
+      - network
+      - compute
+      - all
+
+  - name: template
+    type: string
+    description: 使用するテンプレート名またはパス
+    required: true
+    examples:
+      - azure/compute/vm
+      - aws/compute/ec2
+      - aws/storage/s3
+
+  - name: params
+    type: object
+    description: クエリパラメータ（リソース名、ID等）
+    required: true
+
+  - name: query_type
+    type: string
+    description: クエリの種類
+    required: false
+    default: show
+    enum:
+      - show       # 単一リソースの詳細
+      - list       # リソース一覧
+      - status     # ステータス確認
+      - ip         # IPアドレス取得
+
+  - name: environment
+    type: string
+    description: 環境（local=LocalStack、prod=本番環境）
+    required: false
+    default: local
+    enum:
+      - local
+      - prod
+
+  - name: output_format
+    type: string
+    description: 出力形式
+    required: false
+    default: json
+    enum:
+      - json
+      - table
+      - yaml
+
+outputs:
+  - name: resource_info
+    type: object
+    description: リソース情報
+
+  - name: status
+    type: string
+    description: クエリステータス（success/failed）
+
+  - name: query_executed
+    type: string
+    description: 実行されたクエリコマンド
+
+examples:
+  - name: EC2インスタンス情報の取得
+    description: 特定のEC2インスタンスの詳細を取得
+    input:
+      provider: aws
+      resource_type: compute
+      template: aws/compute/ec2
+      query_type: show
+      params:
+        instance_name: test-instance
+    expected_output:
+      status: success
+
+  - name: Azure VM IPアドレスの取得
+    description: VMのIPアドレスを取得
+    input:
+      provider: azure
+      resource_type: vm
+      template: azure/compute/vm
+      query_type: ip
+      params:
+        vm_name: production-vm
+        resource_group: my-rg
+
+handler:
+  type: bash
+  script: ./query.sh
+  timeout: 300000  # 5分

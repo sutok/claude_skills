@@ -1,0 +1,85 @@
+name: destroy-resource
+version: 1.0.0
+description: クラウドリソースを削除します（VM、ストレージ、ネットワーク等の削除と関連リソースのクリーンアップ）
+category: infrastructure
+provider: multi-cloud
+
+metadata:
+  author: SuperClaude
+  tags:
+    - destroy
+    - delete
+    - terminate
+    - cleanup
+    - infrastructure
+    - azure
+    - aws
+  supported_providers:
+    - aws
+    - azure
+
+parameters:
+  - name: provider
+    type: string
+    description: クラウドプロバイダー
+    required: true
+    enum:
+      - aws
+      - azure
+
+  - name: resource_type
+    type: string
+    description: リソースタイプ
+    required: true
+
+  - name: template
+    type: string
+    description: 使用するテンプレート名またはパス
+    required: true
+
+  - name: params
+    type: object
+    description: 削除対象リソースのパラメータ
+    required: true
+
+  - name: environment
+    type: string
+    description: 環境
+    required: false
+    default: local
+
+  - name: force
+    type: boolean
+    description: 強制削除（確認なし）
+    required: false
+    default: false
+
+  - name: cleanup_associated
+    type: boolean
+    description: 関連リソースもクリーンアップするか
+    required: false
+    default: true
+
+outputs:
+  - name: status
+    type: string
+    description: 削除ステータス
+
+  - name: deleted_resources
+    type: array
+    description: 削除されたリソースのリスト
+
+examples:
+  - name: VMの削除
+    input:
+      provider: azure
+      template: azure/compute/vm
+      params:
+        vm_name: my-vm
+        resource_group: my-rg
+      cleanup_associated: true
+
+handler:
+  type: bash
+  script: ./destroy.sh
+  timeout: 600000

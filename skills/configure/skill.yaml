@@ -1,0 +1,105 @@
+name: configure-resource
+version: 1.0.0
+description: 既存クラウドリソースの設定を変更します（起動、停止、サイズ変更等）
+category: infrastructure
+provider: multi-cloud
+
+metadata:
+  author: SuperClaude
+  tags:
+    - configure
+    - update
+    - modify
+    - start
+    - stop
+    - infrastructure
+    - azure
+    - aws
+  supported_providers:
+    - aws
+    - azure
+
+parameters:
+  - name: provider
+    type: string
+    description: クラウドプロバイダー
+    required: true
+    enum:
+      - aws
+      - azure
+
+  - name: resource_type
+    type: string
+    description: リソースタイプ
+    required: true
+    enum:
+      - vm
+      - storage
+      - network
+      - compute
+
+  - name: template
+    type: string
+    description: 使用するテンプレート名またはパス
+    required: true
+
+  - name: params
+    type: object
+    description: 設定変更パラメータ
+    required: true
+
+  - name: action
+    type: string
+    description: 実行するアクション
+    required: true
+    enum:
+      - start      # リソース起動
+      - stop       # リソース停止
+      - restart    # リソース再起動
+      - resize     # サイズ変更
+      - update     # 設定更新
+      - deallocate # 割り当て解除（Azure）
+
+  - name: environment
+    type: string
+    description: 環境
+    required: false
+    default: local
+
+  - name: wait_for_completion
+    type: boolean
+    description: 操作完了まで待機するか
+    required: false
+    default: true
+
+outputs:
+  - name: status
+    type: string
+    description: 実行ステータス
+
+  - name: resource_state
+    type: string
+    description: 変更後のリソース状態
+
+examples:
+  - name: VMの起動
+    input:
+      provider: azure
+      template: azure/compute/vm
+      action: start
+      params:
+        vm_name: my-vm
+        resource_group: my-rg
+
+  - name: EC2インスタンスの停止
+    input:
+      provider: aws
+      template: aws/compute/ec2
+      action: stop
+      params:
+        instance_name: my-instance
+
+handler:
+  type: bash
+  script: ./configure.sh
+  timeout: 600000

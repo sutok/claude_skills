@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(uvx:*)",
+      "Bash(docker ps:*)",
+      "Bash(INPUT_JSON='{\"template\": \"aws/compute/ec2\", \"validation_level\": \"standard\", \"check_security\": false}' ./skills/validate/validate.sh:*)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true
 }
